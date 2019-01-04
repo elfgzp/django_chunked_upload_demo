@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <link rel="stylesheet" type="text/css" href="http://unpkg.com/iview/dist/styles/iview.css">
+    <script type="text/javascript" src="http://unpkg.com/iview/dist/iview.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.0/spark-md5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.18.0/axios.min.js"></script>
+</head>
+<body>
+{% verbatim %}
+<div id="app">
+    <div style="width: 50%; position: fixed; left: 25%;top: 25%;">
+        <Upload
+                type="drag"
+                :before-upload="handleUpload"
+                action="#">
+            <div style="padding: 20px 0">
+                <Icon type="ios-cloud-upload" size="52" style="color: #3399ff"></Icon>
+                <p>Click or drag files here to upload</p>
+            </div>
+        </Upload>
+        <i-progress :percent="percent" :status="progressStatus"></i-progress>
+        <span>{{ tips }}</span>
+    </div>
+</div>
+{% endverbatim %}
+
+<script>
+    var app = new Vue({
+        el: '#app',
+        data: () => {
+            return {
+                message: 'Hello Vue!',
+                percent: 0,
+                uploadFile: '',
+                tips: '',
+                chunkSize: 2097152,
+                progressStatus: 'active'
+            }
+        },
+        mounted: () => {
+            console.log('mounted')
+        },
+        methods: {
+            handleUpload: function (file) {
+                this.percent = 0
+                this.tips = 'Reading file...'
+                this.progressStatus = 'active'
+                let _handleUpload = async (file) => {
+                    this.getFileMD5(file, async (md5) => {
+                        console.log(md5)
+                        this.tips = 'Read file success...'
+                        let url = 'api/attachments/' + md5
+
+
+                        function _getFileOffset(url) {
+                            return axios.get(url)
+                                .then(res => {
+                                    let data = res.data || {}
+                                    return data.offset || 0
+                                })
+                                .catch(e => {
+                                    if (e.response.status === 404) {
+                                        return 0
+                                    } else {
+                                        throw e
+                                    }
+                                })
+                        }
+
+                        function _upload(url, formData, config) {
+                            return axios.put(url, formData, config)
+                                .then(res => {
+                                    return res
+                                }).catch(e => {
+                                    return e.response
+                                })
+                        }
+
+
+                        let eachChunk = null,
+                            offset = await _getFileOffset(url),
+                            start = 0,
+                            end = 0
+
+                        this.percent = 0
+                        for (let currentChunk = 0; end < file.size; currentChunk++) {
+
+                            start = offset + currentChunk * this.chunkSize
+                            end = start + this.chunkSize >= file.size ? file.size : start + this.chunkSize
+
+                            this.tips = 'Uploading...'
+                            this.percent = Math.round(Number(end / file.size * 100))
+
+                            eachChunk = file.slice(start, end)
+
+                            let formData = new FormData()
+                            formData.append(
+                                'file',
+                                new File(
+                                    [eachChunk], file.name, {
+                                        lastModified: file.lastModified,
+                                        lastModifiedDate: file.lastModifiedDate,
+                                        name: file.name,
+                                        type: file.type,
+                                        webkitRelativePath: file.webkitRelativePath
+                                    }
+                                )
+                            )
+                            formData.append('filename', file.name)
+                            let config = {
+                                headers: {
+                                    'Content-Type': 'multipart/form-data',
+                                    'Content-Range': 'bytes ' + start + '-' + end + '/' + file.size
+                                }
+                            }
+
+                            let res = await _upload(url, formData, config)
+                            if (res.status !== 200) {
+                                this.tips = 'Upload failed...'
+                                this.progressStatus = 'wrong'
+                            }
+
+                        }
+                        this.tips = 'Upload completed...'
+                    })
+                }
+                _handleUpload(file)
+                return false
+            },
+            getFileMD5(file, callback) {
+                //声明必要的变量
+                let fileReader = new FileReader(),
+
+                    //文件每块分割2M，计算分割详情
+                    chunkSize = this.chunkSize * 200,
+                    chunks = Math.ceil(file.size / chunkSize),
+                    currentChunk = 0,
+                    start = 0,
+                    end = 0,
+                    //创建md5对象（基于SparkMD5）
+                    spark = new SparkMD5()
+
+                //每块文件读取完毕之后的处理
+                fileReader.onload = (e) => {
+                    //每块交由sparkMD5进行计算
+                    this.percent = Math.round(Number(end / file.size * 10))
+                    spark.appendBinary(e.target.result)
+                    currentChunk++
+
+                    //如果文件处理完成计算MD5，如果还有分片继续处理
+                    if (currentChunk < chunks) {
+                        loadNext()
+                    } else {
+                        callback(spark.end())
+                    }
+                }
+
+                //处理单片文件的上传
+                function loadNext() {
+                    start = currentChunk * chunkSize
+                    end = start + chunkSize >= file.size ? file.size : start + chunkSize
+
+                    fileReader.readAsBinaryString(file.slice(start, end))
+                }
+
+                loadNext()
+
+            }
+        }
+    })
+</script>
+</body>
+</html>
