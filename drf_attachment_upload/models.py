@@ -107,7 +107,7 @@ class Attachment(models.Model):
         md5_value = md5()
         self.file.open('rb')
         while True:
-            data_flow = self.file.read(102400)  # 每次读入100M进入内存
+            data_flow = self.file.read(2097152)  # 每次读入2M进入内存
             if not data_flow:  # 读取完后返回空值，False
                 break
             md5_value.update(data_flow)
