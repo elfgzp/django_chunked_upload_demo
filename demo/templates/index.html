@@ -136,7 +136,7 @@
                 let fileReader = new FileReader(),
 
                     //文件每块分割2M，计算分割详情
-                    chunkSize = this.chunkSize * 200,
+                    chunkSize = this.chunkSize,
                     chunks = Math.ceil(file.size / chunkSize),
                     currentChunk = 0,
                     start = 0,
@@ -147,7 +147,7 @@
                 //每块文件读取完毕之后的处理
                 fileReader.onload = (e) => {
                     //每块交由sparkMD5进行计算
-                    this.percent = Math.round(Number(end / file.size * 10))
+                    this.percent = Math.round(Number(end / file.size * 100))
                     spark.appendBinary(e.target.result)
                     currentChunk++
 
